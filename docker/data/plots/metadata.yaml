@@ -1,0 +1,54 @@
+rosbag2_bagfile_information:
+  version: 9
+  storage_identifier: sqlite3
+  duration:
+    nanoseconds: 1334498000000
+  starting_time:
+    nanoseconds_since_epoch: 603000000
+  message_count: 80056
+  topics_with_message_count:
+    - topic_metadata:
+        name: /leader/gps/fix
+        type: sensor_msgs/msg/NavSatFix
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: RIHS01_62223ab3fe210a15976021da7afddc9e200dc9ec75231c1b6a557fc598a65404
+      message_count: 13340
+    - topic_metadata:
+        name: /leader/localisation/filtered_odom
+        type: nav_msgs/msg/Odometry
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: RIHS01_3cc97dc7fb7502f8714462c526d369e35b603cfc34d946e3f2eda2766dfec6e0
+      message_count: 26684
+    - topic_metadata:
+        name: /follower/gps/fix
+        type: sensor_msgs/msg/NavSatFix
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: RIHS01_62223ab3fe210a15976021da7afddc9e200dc9ec75231c1b6a557fc598a65404
+      message_count: 13341
+    - topic_metadata:
+        name: /follower/localisation/filtered_odom
+        type: nav_msgs/msg/Odometry
+        serialization_format: cdr
+        offered_qos_profiles:
+          []
+        type_description_hash: RIHS01_3cc97dc7fb7502f8714462c526d369e35b603cfc34d946e3f2eda2766dfec6e0
+      message_count: 26691
+  compression_format: ""
+  compression_mode: ""
+  relative_file_paths:
+    - plots_0.db3
+  files:
+    - path: plots_0.db3
+      starting_time:
+        nanoseconds_since_epoch: 603000000
+      duration:
+        nanoseconds: 1334498000000
+      message_count: 80056
+  custom_data: ~
+  ros_distro: jazzy

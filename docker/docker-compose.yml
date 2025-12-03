@@ -1,4 +1,10 @@
+# RUN INSTRUCTION:
 # docker compose -p ros2 up -d --build
+
+# NOTE: 
+# For the GUI to work (ROS2 robot path visualization), you must run this stack from a WSL 2 terminal.
+# Windows shells (PowerShell/CMD) do not populate the ${DISPLAY} variable required for X11 forwarding.
+
 services:
 
   #flink
@@ -148,7 +154,7 @@ services:
 
 # docker exec -it ros2-visualizer-1 bash
 # source /opt/ros/jazzy/setup.bash
-# ros2 bag play /app/plots.db3 --rate 10 --topics /leader/gps/fix
+# ros2 bag play /app/data/plots/plots.db3 --rate 10 --topics /leader/gps/fix
 
 #or
 
@@ -158,6 +164,6 @@ services:
     network_mode: host
     volumes:
       - ./data:/data
-    command: ["ros2", "bag", "play", "/data/plots.db3", "-r", "10.0", "--topics", "/leader/gps/fix", "/follower/gps/fix"]
+    command: ["ros2", "bag", "play", "/data/plots/plots.db3", "-r", "10.0", "--topics", "/leader/gps/fix", "/follower/gps/fix"]
     profiles:
       - manual
