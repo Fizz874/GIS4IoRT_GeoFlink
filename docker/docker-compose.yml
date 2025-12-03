@@ -1,0 +1,163 @@
+# docker compose -p ros2 up -d --build
+services:
+
+  #flink
+  jobmanager:
+      image: flink:1.9.1
+      depends_on:
+        broker:
+          condition: service_healthy
+      ports:
+        - "8082:8081"
+      volumes:
+        - ./data:/data
+
+      # volumes:
+      #   - ./../../SpatialFlink/conf:/opt/flink/conf
+      command: jobmanager
+      environment:
+        - |
+          FLINK_PROPERTIES=
+          jobmanager.rpc.address: jobmanager        
+
+  taskmanager:
+    image: flink:1.9.1
+    depends_on:
+      - jobmanager
+    volumes:
+      - ./data:/data
+    # volumes:
+    #   - ./../../SpatialFlink/conf:/opt/flink/conf
+    command: taskmanager
+    scale: 3
+    environment:
+      - |
+        FLINK_PROPERTIES=
+        jobmanager.rpc.address: jobmanager
+        taskmanager.numberOfTaskSlots: 2    
+
+  #kafka side
+
+  # Kafka Broker with KRaft (no Zookeeper)
+  broker:
+    image: confluentinc/cp-kafka:latest
+    container_name: broker
+    hostname: broker
+    ports:
+      - "9092:9092"
+      - "9093:9093"
+    environment:
+      # KRaft settings
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@broker:29093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      CLUSTER_ID: "MkU3OEVBNTcwNTJENDM2Qk"
+
+      # Fixed Listener Configuration
+      KAFKA_LISTENERS: "INTERNAL://broker:29092,CONTROLLER://broker:29093,EXTERNAL://0.0.0.0:9092"
+      KAFKA_ADVERTISED_LISTENERS: "INTERNAL://broker:29092,EXTERNAL://localhost:9092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "INTERNAL"
+
+      # Internal topic settings
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      
+      # Other settings
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_JMX_PORT: "9101"
+      KAFKA_JMX_HOSTNAME: "localhost"
+    healthcheck:
+      test: ["CMD", "bash", "-c", "echo > /dev/tcp/broker/29092"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  schema-registry:
+      image: confluentinc/cp-schema-registry:latest
+      hostname: schema-registry
+      container_name: schema-registry
+      depends_on:
+        broker:
+          condition: service_healthy
+      ports:
+        - "8081:8081"
+      environment:
+        SCHEMA_REGISTRY_HOST_NAME: schema-registry
+        SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'broker:29092'
+        SCHEMA_REGISTRY_LISTENERS: http://0.0.0.0:8081
+
+  kafka-ui:
+      image: provectuslabs/kafka-ui:latest
+      hostname: kafka-ui
+      container_name: kafka-ui
+      ports:
+        - "8090:8080"
+      depends_on:
+        - broker
+        - schema-registry
+      environment:
+        KAFKA_CLUSTERS_0_NAME: local
+        KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: broker:29092 #9092
+        KAFKA_CLUSTERS_0_SCHEMAREGISTRY: http://schema-registry:8081
+
+
+  #robot side
+
+  rviz:
+    build: ./rviz
+    network_mode: host
+    environment:
+      - DISPLAY=${DISPLAY}
+      - XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}
+      - LIBGL_ALWAYS_SOFTWARE=1
+    env_file: .env
+    volumes:
+      - ./rviz/rviz_config:/root/.rviz2
+      - /tmp/.X11-unix:/tmp/.X11-unix
+    command: rviz2 -d /root/.rviz2/parcelles_gps.rviz
+
+
+  kafka_bridge:
+    build: ./kafka_bridge
+    network_mode: host
+    depends_on:
+      - broker
+      - schema-registry
+    volumes:
+      - ./kafka_bridge/ros_kafka_bridge.py:/app/ros_kafka_bridge.py
+    env_file: .env
+    command: ["python3", "/app/ros_kafka_bridge.py", "--ros-args", "-p", "robot_name:=leader", "-p", "kafka_bootstrap_servers:=localhost:9092"]
+
+  visualizer:
+    build: ./visualizer
+    network_mode: host
+    volumes: 
+      - ./data:/app/data
+      - ./visualizer/marker_painter.py:/app/marker_painter.py
+    env_file: .env
+    command: ["python3", "/app/marker_painter.py", "--ros-args", "-p", "robot_name:=leader", "-p", "centroid_shape_name:='1 MONT'"]
+
+
+
+#Rosbag player should be run separately from the other containers
+#use either:
+
+# docker exec -it ros2-visualizer-1 bash
+# source /opt/ros/jazzy/setup.bash
+# ros2 bag play /app/plots.db3 --rate 10 --topics /leader/gps/fix
+
+#or
+
+#docker compose -p ros2 run rosbag_player
+  rosbag_player:
+    build: ./rosbag_player
+    network_mode: host
+    volumes:
+      - ./data:/data
+    command: ["ros2", "bag", "play", "/data/plots.db3", "-r", "10.0", "--topics", "/leader/gps/fix", "/follower/gps/fix"]
+    profiles:
+      - manual
