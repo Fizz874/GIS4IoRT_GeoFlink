@@ -1,0 +1,106 @@
+!!GeoFlink.utils.ConfigType
+# This is a GeoFlink Config File 
+# ---
+# Cluster
+clusterMode: False
+#kafkaBootStrapServers: "172.16.0.64:9092, 172.16.0.81:9092"
+kafkaBootStrapServers: "localhost:9092"
+#kafkaBootStrapServers: "localhost:9092"
+
+# Input Stream1
+inputStream1:
+  #topicName: "randPointUniform"
+  #topicName: "TaxiDrive17MillionGeoJSON"
+  topicName: "robot2_odom"
+  # format : GeoJSON or WKT or CSV or TSV
+  format: "CSV"
+  #dateFormat: "null" if timestamp is already in epoch milliseconds
+  #dateFormat: "yyyy-MM-dd HH:mm:ss"
+  dateFormat: "null"
+  geoJSONSchemaAttr: ["oID", "timestamp"]
+  #csvTsvSchemaAttr: [1, 4, 5, 6]
+  csvTsvSchemaAttr: [0, 1, 2, 3]
+  # csvTsvSchemaAttr : object ID, timestamp, coordinate-x, coordinate-y (Point only)
+  #gridBBox: [115.5, 39.6, 117.6, 41.1]
+  #gridBBox: [16.85, 52.35, 17.05, 52.45] #Poznań
+  gridBBox: [-100.0,-100.0,100.0,100.0]
+  #gridBBox: [-41543.0, -27825.0, 48431.0, 24224.0]
+  numGridCells: 100
+  cellLength: 0
+  # delimiter : CSV = ",", TSV separeted by TAB character = "	" or "\t", TSV separeted by \t = "\\\\t"
+  delimiter: ","
+  charset: "UTF-8"
+
+# Input Stream2
+inputStream2:
+  topicName: "robot1_odom"
+  # format : GeoJSON or WKT or CSV or TSV
+  format: "CSV"
+  #dateFormat: "null" if timestamp is already in epoch milliseconds
+  dateFormat: "null"
+  geoJSONSchemaAttr: [ "oID", "timestamp" ]
+  csvTsvSchemaAttr: [ 0, 1, 2, 3 ]
+  # csvTsvSchemaAttr : object ID, timestamp, coordinate-x, coordinate-y (Point only)
+  gridBBox: [ -100.0,-100.0,100.0,100.0 ]
+  numGridCells: 100
+  cellLength: 0
+  # delimiter : CSV = ",", TSV separeted by TAB character = "	" or "\t", TSV separeted by \t = "\\\\t"
+  delimiter: ","
+  charset: "UTF-8"
+
+
+#  topicName: "TaxiDriveGeoJSON_Live"
+#  # format : GeoJSON or WKT or CSV or TSV
+#  format: "GeoJSON"
+#  dateFormat: "yyyy-MM-dd HH:mm:ss"
+#  geoJSONSchemaAttr: ["oID", "timestamp"]
+#  # csvTsvSchemaAttr : object ID, timestamp, coordinate-x, coordinate-y (Point only)
+#  csvTsvSchemaAttr: [1, 4, 5, 6]
+#  gridBBox: [115.5, 39.6, 117.6, 41.1]
+#  numGridCells: 100
+#  cellLength: 0
+#  # delimiter : CSV = ",", TSV separeted by TAB character = "	" or "\t", TSV separeted by \t = "\\\\t"
+#  #delimiter: "\\\\t"
+#  delimiter: ","
+#  charset: "UTF-8"
+
+# Output Stream
+outputStream:
+  topicName: "GeoJSONToCSV"
+  delimiter: ","
+
+# Query parameters
+query:
+  option: 6 #2011 or 211
+  parallelism: 15
+  approximate: False
+  radius: 10.0 #4.0 #10.5
+  aggregateFunction: "SUM"
+  k: 100
+  omegaDuration: 1
+  trajIDs: [123, 231]
+  
+  queryPoints:
+    - [0.0, 0.0]
+    #- [116.14319, 40.07271]
+    #- [117.6, 40.5]
+    
+  queryPolygons:
+    - [ [ -4.0, -4.0 ],[ 4.0, -4.0 ],[ 4.0, 4.0 ],[ -4.0, 4.0 ], [ -4.0, -4.0 ] ]
+#    - [[116.5, 40.5], [117.6, 40.5], [117.6, 41.4], [116.5, 41.4], [116.5, 40.5]]
+#    - [[116.5, 40.5], [117.6, 40.5], [117.6, 41.4], [116.5, 41.4], [116.5, 40.5]]
+    #- [[-41543.0, -8046.37999999997],[-41022.51, -8046.37999999997],[-41022.51, -7525.88999999997],[-41543.0, -7525.88999999997],[-41543.0, -8046.37999999997]]
+  
+  queryLineStrings: 
+    - [[116.5, 40.5], [117.6, 40.5], [117.6, 41.4], [116.5, 41.4]]
+    - [[116.5, 40.5], [117.6, 40.5], [117.6, 41.4], [116.5, 41.4]]
+  
+  thresholds:
+    trajDeletion: 1000
+    outOfOrderTuples: 1
+
+# Window parameters
+window:
+  type: "TIME"
+  interval: 5
+  step: 5

@@ -1,0 +1,16 @@
+jobmanager.rpc.address: cf03740fe677
+blob.server.port: 6124
+query.server.port: 6125
+
+jobmanager.rpc.address: cf03740fe677
+
+taskmanager.numberOfTaskSlots: 16
+
+jobmanager.rpc.address: cf03740fe677
+taskmanager.numberOfTaskSlots: 16
+
+jobmanager.rpc.address: cf03740fe677
+
+
+jobmanager.rpc.address: jobmanager
+taskmanager.numberOfTaskSlots: 2    

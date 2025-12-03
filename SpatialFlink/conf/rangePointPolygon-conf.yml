@@ -1,0 +1,76 @@
+!!GeoFlink.utils.ConfigType
+# This is a GeoFlink Config File
+# ---
+# Cluster
+clusterMode: False
+kafkaBootStrapServers: "localhost:9092"
+
+# Input Stream1
+inputStream1:
+  topicName: "robot1_odom"
+  # format : GeoJSON or WKT or CSV or TSV
+  format: "CSV"
+  dateFormat: "null"
+  geoJSONSchemaAttr: ["oID", "timestamp"]
+  csvTsvSchemaAttr: [0, 1, 2, 3]
+  # csvTsvSchemaAttr : object ID, timestamp, coordinate-x, coordinate-y (Point only)
+  gridBBox: [-50.0,-50.0,50.0,50.0]
+  #gridBBox: [-41543.0, -27825.0, 48431.0, 24224.0]
+  numGridCells: 100
+  cellLength: 0
+  # delimiter : CSV = ",", TSV separeted by TAB character = "	" or "\t", TSV separeted by \t = "\\\\t"
+  delimiter: ","
+  charset: "UTF-8"
+
+# Input Stream2
+inputStream2:
+  topicName: "robot2_odom"
+  # format : GeoJSON or WKT or CSV or TSV
+  format: "CSV"
+  #dateFormat: "null" if timestamp is already in epoch milliseconds
+  dateFormat: "null"
+  geoJSONSchemaAttr: [ "oID", "timestamp" ]
+  csvTsvSchemaAttr: [ 0, 1, 2, 3 ]
+  # csvTsvSchemaAttr : object ID, timestamp, coordinate-x, coordinate-y (Point only)
+  gridBBox: [ -50.0,-50.0,50.0,50.0 ]
+  numGridCells: 100
+  cellLength: 0
+  # delimiter : CSV = ",", TSV separeted by TAB character = "	" or "\t", TSV separeted by \t = "\\\\t"
+  delimiter: ","
+  charset: "UTF-8"
+
+# Output Stream
+outputStream:
+  topicName: "GeoJSONToCSV"
+  delimiter: ","
+
+# Query parameters
+query:
+  option: 5 #2011 or 211
+  parallelism: 15
+  approximate: False
+  radius: 0.0 #4.0 #10.5
+  aggregateFunction: "SUM"
+  k: 100
+  omegaDuration: 1
+  trajIDs: [123, 231]
+
+  queryPoints:
+    - [0.0, 0.0]
+
+  queryPolygons:
+    - [ [ -4.0, -4.0 ],[ 4.0, -4.0 ],[ 4.0, 4.0 ],[ -4.0, 4.0 ], [ -4.0, -4.0 ] ]
+
+  queryLineStrings:
+    - [[116.5, 40.5], [117.6, 40.5], [117.6, 41.4], [116.5, 41.4]]
+  #   - [[116.5, 40.5], [117.6, 40.5], [117.6, 41.4], [116.5, 41.4]]
+
+  thresholds:
+    trajDeletion: 1000
+    outOfOrderTuples: 1
+
+# Window parameters
+window:
+  type: "TIME"
+  interval: 5
+  step: 5

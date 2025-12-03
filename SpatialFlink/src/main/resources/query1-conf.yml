@@ -1,0 +1,71 @@
+!!GeoFlink.utils.ConfigType
+# This is a GeoFlink Config File
+# ---
+# Cluster
+clusterMode: True
+kafkaBootStrapServers: "broker:29092"
+
+# Input Stream1
+inputStream1:
+  topicName: "leader_gps_fix" #TODO
+  format: "CSV"
+  dateFormat: "null"
+  geoJSONSchemaAttr: ["oID", "timestamp"]
+  csvTsvSchemaAttr: [0, 1, 2, 3]
+  gridBBox: [3.430, 46.336, 3.436, 46.342] #[46.336, 3.430, 46.342, 3.436] #
+  numGridCells: 100
+  cellLength: 0
+  delimiter: ","
+  charset: "UTF-8"
+
+# Input Stream2
+inputStream2:
+  topicName: "null"
+  format: "CSV"
+  dateFormat: "null"
+  geoJSONSchemaAttr: [ "oID", "timestamp" ]
+  csvTsvSchemaAttr: [ 0, 1, 2, 3 ]
+  gridBBox: [ -50.0,-50.0,50.0,50.0 ]
+  numGridCells: 10
+  cellLength: 0
+  delimiter: ","
+  charset: "UTF-8"
+
+# Output Stream TODO
+outputStream:
+  topicName: "null"
+  delimiter: ","
+
+
+# Query parameters
+query:
+  option: 1
+  parallelism: 6
+  approximate: False
+  radius: 0.0
+  aggregateFunction: "SUM"
+  k: 100
+  omegaDuration: 1
+  trajIDs: [123, 231]
+
+  queryPoints:
+    - [0.0, 0.0]
+    #- [116.14319, 40.07271]
+    #- [117.6, 40.5]
+
+  queryPolygons:
+    - [ [ -4.0, -4.0 ],[ 4.0, -4.0 ],[ 4.0, 4.0 ],[ -4.0, 4.0 ], [ -4.0, -4.0 ] ]
+
+  queryLineStrings:
+    - [[116.5, 40.5], [117.6, 40.5], [117.6, 41.4], [116.5, 41.4]]
+    - [[116.5, 40.5], [117.6, 40.5], [117.6, 41.4], [116.5, 41.4]]
+
+  thresholds:
+    trajDeletion: 1000
+    outOfOrderTuples: 1
+
+# Window parameters
+window:
+  type: "TIME"
+  interval: 5
+  step: 5
