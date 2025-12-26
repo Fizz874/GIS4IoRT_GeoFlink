@@ -16,63 +16,39 @@
  * limitations under the License.
  */
 
-package GeoFlink;
+package GIS4IoRT.jobs;
 
-import GeoFlink.apps.StayTime;
-import GeoFlink.apps.CheckIn;
 import GeoFlink.spatialIndices.UniformGrid;
 import GeoFlink.spatialObjects.*;
 import GeoFlink.spatialOperators.*;
-import GeoFlink.spatialOperators.tJoin.TJoinQuery;
-import GeoFlink.spatialOperators.tRange.TRangeQuery;
-import GeoFlink.spatialOperators.tStats.PointTStatsQuery;
 import GeoFlink.spatialOperators.join.*;
 import GeoFlink.spatialOperators.knn.*;
 import GeoFlink.spatialOperators.range.*;
-import GeoFlink.spatialOperators.tAggregate.PointTAggregateQuery;
-import GeoFlink.spatialOperators.tFilter.PointTFilterQuery;
-import GeoFlink.spatialOperators.tJoin.PointPointTJoinQuery;
-import GeoFlink.spatialOperators.tKnn.PointPointTKNNQuery;
-import GeoFlink.spatialOperators.tRange.PointPolygonTRangeQuery;
 import GeoFlink.spatialStreams.*;
-import GeoFlink.utils.HelperClass;
 import GeoFlink.utils.Params;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.apache.flink.api.common.state.ValueState;
 import org.apache.flink.api.common.state.ValueStateDescriptor;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.api.java.tuple.Tuple4;
-import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.streaming.api.TimeCharacteristic;
-import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
-import org.apache.flink.streaming.api.functions.timestamps.BoundedOutOfOrdernessTimestampExtractor;
-import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
-import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
-import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer;
 import org.apache.flink.streaming.util.serialization.JSONKeyValueDeserializationSchema;
 import org.apache.flink.util.Collector;
 import org.locationtech.jts.geom.Coordinate;
 import scala.Serializable;
 
-import java.nio.charset.Charset;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 public class StreamingJob implements Serializable {
 

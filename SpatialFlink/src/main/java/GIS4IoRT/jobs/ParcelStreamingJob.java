@@ -1,70 +1,43 @@
-package GeoFlink;
+package GIS4IoRT.jobs;
 
-import GeoFlink.apps.StayTime;
-import GeoFlink.apps.CheckIn;
+import GIS4IoRT.operators.PointPolygonOutsideJoinQuery;
+import GIS4IoRT.operators.PointPolygonOutsideRangeQuery;
+import GIS4IoRT.utils.DynamicParcelRepeater;
+import GIS4IoRT.utils.WhitelistGatekeeper;
 import GeoFlink.spatialIndices.UniformGrid;
 import GeoFlink.spatialObjects.*;
 import GeoFlink.spatialOperators.*;
-import GeoFlink.spatialOperators.tJoin.TJoinQuery;
-import GeoFlink.spatialOperators.tRange.TRangeQuery;
-import GeoFlink.spatialOperators.tStats.PointTStatsQuery;
-import GeoFlink.spatialOperators.join.*;
-import GeoFlink.spatialOperators.knn.*;
-import GeoFlink.spatialOperators.range.*;
-import GeoFlink.spatialOperators.tAggregate.PointTAggregateQuery;
-import GeoFlink.spatialOperators.tFilter.PointTFilterQuery;
-import GeoFlink.spatialOperators.tJoin.PointPointTJoinQuery;
-import GeoFlink.spatialOperators.tKnn.PointPointTKNNQuery;
-import GeoFlink.spatialOperators.tRange.PointPolygonTRangeQuery;
+import GeoFlink.spatialOperators.join.PointPolygonJoinQuery;
 import GeoFlink.spatialStreams.*;
-import GeoFlink.utils.HelperClass;
 import GeoFlink.utils.Params;
 import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.api.common.functions.ReduceFunction;
 import org.apache.flink.api.common.operators.Order;
 import org.apache.flink.api.common.serialization.SimpleStringSchema;
-import org.apache.flink.api.common.state.ValueState;
-import org.apache.flink.api.common.state.ValueStateDescriptor;
-import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.ExecutionEnvironment;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.api.java.tuple.Tuple3;
-import org.apache.flink.api.java.tuple.Tuple4;
-import org.apache.flink.api.java.tuple.Tuple5;
 import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.configuration.RestOptions;
 import org.apache.flink.streaming.api.TimeCharacteristic;
-import org.apache.flink.core.fs.Path;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
-import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
-import org.apache.flink.streaming.api.functions.timestamps.AscendingTimestampExtractor;
-import org.apache.flink.streaming.api.functions.timestamps.BoundedOutOfOrdernessTimestampExtractor;
-import org.apache.flink.streaming.api.functions.windowing.ProcessAllWindowFunction;
 import org.apache.flink.streaming.api.functions.windowing.ProcessWindowFunction;
-import org.apache.flink.streaming.api.windowing.assigners.TumblingEventTimeWindows;
 import org.apache.flink.streaming.api.windowing.assigners.TumblingProcessingTimeWindows;
 import org.apache.flink.streaming.api.windowing.time.Time;
-import org.apache.flink.streaming.api.windowing.triggers.ContinuousProcessingTimeTrigger;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer;
-import org.apache.flink.streaming.connectors.kafka.FlinkKafkaProducer;
-import org.apache.flink.streaming.util.serialization.JSONKeyValueDeserializationSchema;
 import org.apache.flink.util.Collector;
 import org.locationtech.jts.geom.Coordinate;
 import scala.Serializable;
 
-import java.nio.charset.Charset;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
-import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import java.util.stream.StreamSupport;
 
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.WKBReader;
@@ -265,26 +238,30 @@ public class ParcelStreamingJob implements Serializable {
                     //No watermarks - If we assume that we need that information as soon as possible (no info about event time)
 
                 rNeighbors
-                        .windowAll(TumblingProcessingTimeWindows.of(Time.seconds(1)))
-                        .process(new ProcessAllWindowFunction<Point, String, TimeWindow>() {
+                        .keyBy(point -> point.objID)
+                        //.windowAll(TumblingProcessingTimeWindows.of(Time.seconds(1)))
+                        .window(TumblingProcessingTimeWindows.of(Time.seconds(1)))
+                        .process(new ProcessWindowFunction<Point, String, String, TimeWindow>() {
                             @Override
-                            public void process(Context context, Iterable<Point> elements, Collector<String> out) {
+                            public void process(String key, Context context, Iterable<Point> elements, Collector<String> out) {
                                 long windowStart = context.window().getStart(); // początek okna w ms
                                 long windowEnd   = context.window().getEnd();   // koniec okna w ms
 
                                 String timeInfo = String.format("Window [%tT - %tT]: ", windowStart, windowEnd);
                                 if (elements.iterator().hasNext()) {
-                                    out.collect(timeInfo + "TRUE");
+                                    String message = String.format("%s Obiekt ID: %s -> TRUE (Wykryto poza strefą)", timeInfo, key);
+                                    out.collect(message);
+                                    //out.collect(timeInfo + "TRUE");
                                 }
 
                             }
                         })
-                    .addSink(new FlinkKafkaProducer<>(
-                            "query1-results",
-                            new SimpleStringSchema(),
-                            kafkaProperties
-                    ));
-                        //.print();
+//                    .addSink(new FlinkKafkaProducer<>(
+//                            "query1-results",
+//                            new SimpleStringSchema(),
+//                            kafkaProperties
+//                    ));
+                        .print();
 
                     break;
                 }
@@ -329,6 +306,80 @@ public class ParcelStreamingJob implements Serializable {
 
                 break;
             }
+            case 3: {
+
+                //Strumień sterujący
+                DataStream<String> controlStream = env.addSource(new FlinkKafkaConsumer<>("query1Control", new SimpleStringSchema(), kafkaProperties));
+
+                DataStream<String> robotStream = controlStream
+                        .filter(str -> str.startsWith("ROBOT"));
+
+                DataStream<String> zoneStream = controlStream
+                        .filter(str -> str.startsWith("ZONE"));
+
+
+
+                DataStream<Polygon> polygonStream = zoneStream
+                        .keyBy(cmd -> "ZONE_MANAGER") // Wszystkie komendy strefowe w jedno miejsce
+                        .process(new DynamicParcelRepeater(uGrid));
+
+
+                DataStream geoJSONStream = env.addSource(new FlinkKafkaConsumer<>(inputTopicName, new SimpleStringSchema(), kafkaProperties)
+                        .setStartFromLatest());
+
+                DataStream<Point> spatialPointStream = Deserialization.TrajectoryStream(geoJSONStream, inputFormat, inputDateFormat, inputDelimiter1, csvTsvSchemaAttr1, "timestamp", "oID", uGrid);
+
+
+                DataStream<Point> filteredPoints = spatialPointStream
+                        .connect(robotStream.broadcast(WhitelistGatekeeper.ALLOWED_LIST_DESC))
+                        .process(new WhitelistGatekeeper());
+
+
+//
+//                List<List<List<Coordinate>>> allZones = new ArrayList<>();
+//                allZones.add(listCoordinatePolygon);
+//                List<String> names = null;
+//                DataStream<Polygon> queryPolygonStream = env.addSource(
+//                        new PolygonHeartbeatSource(allZones, names, uGrid, 500)
+//                ).setParallelism(1);
+                PointPolygonJoinQuery joinQuery = new PointPolygonJoinQuery(realtimeConf, uGrid, uGrid);
+                                                         //TODO change back to new PointPolygonOutsideJoinQuery(realtimeConf, uGrid, uGrid);
+                DataStream<Tuple2<Point, Polygon>> joinResult = joinQuery.run(
+                        filteredPoints,
+                        polygonStream,
+                        0.0000001
+                );
+
+
+                joinResult
+                        .keyBy((KeySelector<Tuple2<Point, Polygon>, String>) value -> value.f0.objID)
+                        .window(TumblingProcessingTimeWindows.of(Time.seconds(1)))
+                        .process(new ProcessWindowFunction<Tuple2<Point, Polygon>, String, String, TimeWindow>() {
+                            @Override
+                            public void process(String key, Context context, Iterable<Tuple2<Point, Polygon>> elements, Collector<String> out) {
+                                long windowStart = context.window().getStart(); // początek okna w ms
+                                long windowEnd   = context.window().getEnd();   // koniec okna w ms
+
+                                String timeInfo = String.format("Window [%tT - %tT]: ", windowStart, windowEnd);
+                                if (elements.iterator().hasNext()) {
+                                    String message = String.format("%s Object ID: %s -> TRUE (Outside of the zone)", timeInfo, key);
+                                    out.collect(message);
+                                    //out.collect(timeInfo + "TRUE");
+                                }
+
+                            }
+                        })
+                        .print();
+
+
+                //TODO usunąć razem z klasą ParcelStatusEmitter - nietrafiony pomysł
+//                DataStream<String> alarms = joinResult.keyBy((KeySelector<Tuple2<Point, Polygon>, String>) value -> value.f0.objID)
+//                        .process(new ParcelStatusEmitter());
+//                alarms.print();
+
+                break;
+            }
+
             default:
                 System.out.println("Input Unrecognized. Please select option from 1-10.");
         }

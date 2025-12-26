@@ -1,4 +1,4 @@
-package GeoFlink.spatialOperators.range;
+package GIS4IoRT.operators;
 
 import GeoFlink.spatialIndices.SpatialIndex;
 import GeoFlink.spatialIndices.UniformGrid;
@@ -6,6 +6,7 @@ import GeoFlink.spatialObjects.Point;
 import GeoFlink.spatialObjects.Polygon;
 import GeoFlink.spatialOperators.QueryConfiguration;
 import GeoFlink.spatialOperators.QueryType;
+import GeoFlink.spatialOperators.range.RangeQuery;
 import GeoFlink.utils.DistanceFunctions;
 import org.apache.flink.api.common.functions.FilterFunction;
 import org.apache.flink.api.common.functions.FlatMapFunction;
@@ -19,11 +20,9 @@ import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.streaming.api.windowing.windows.TimeWindow;
 import org.apache.flink.util.Collector;
 import org.apache.flink.util.OutputTag;
-import org.locationtech.jts.geom.Coordinate;
 
 import java.util.Date;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class PointPolygonOutsideRangeQuery extends RangeQuery<Point, Polygon> {
