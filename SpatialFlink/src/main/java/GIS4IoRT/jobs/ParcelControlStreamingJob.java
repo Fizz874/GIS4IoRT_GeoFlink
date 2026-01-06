@@ -1,8 +1,11 @@
 package GIS4IoRT.jobs;
 
 
+import GIS4IoRT.objects.AssignedPoint;
+import GIS4IoRT.operators.PointPolygonOutsideJoinQuery;
 import GIS4IoRT.utils.ConfigLoader;
 import GIS4IoRT.utils.DynamicParcelRepeater;
+import GIS4IoRT.utils.SessionManager;
 import GIS4IoRT.utils.WhitelistGatekeeper;
 import GeoFlink.spatialIndices.UniformGrid;
 import GeoFlink.spatialObjects.Point;
@@ -42,7 +45,7 @@ public class ParcelControlStreamingJob implements Serializable {
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class JobConfig {
         //Default parameter values
-        public boolean localWebUi = false;
+        public boolean localWebUi = true;
         public int parallelism = 1;
         public String bootStrapServers = "localhost:9092";
 
@@ -118,44 +121,57 @@ public class ParcelControlStreamingJob implements Serializable {
         //Processing
         DataStream<String> controlStream = env.addSource(new FlinkKafkaConsumer<>(config.controlTopicName, new SimpleStringSchema(), kafkaProperties).setStartFromEarliest());
 
-        DataStream<String> robotStream = controlStream
-                .filter(str -> str.startsWith("ROBOT"));
+        DataStream<String> geoJSONStream = env.addSource(new FlinkKafkaConsumer<>(config.inputTopicName, new SimpleStringSchema(), kafkaProperties)
+                .setStartFromLatest());
+
+
 
         DataStream<String> zoneStream = controlStream
                 .filter(str -> str.startsWith("ZONE"));
 
-
         DataStream<Polygon> polygonStream = zoneStream
                 .keyBy(cmd -> "ZONE_MANAGER")
-                .process(new DynamicParcelRepeater(uGrid));
+                .process(new DynamicParcelRepeater(uGrid,config.omegaDuration));
 
 
-        DataStream<String> geoJSONStream = env.addSource(new FlinkKafkaConsumer<>(config.inputTopicName, new SimpleStringSchema(), kafkaProperties)
-                .setStartFromLatest());
+        DataStream<String> robotStream = controlStream
+                .filter(str -> str.startsWith("ROBOT"));
+
 
         DataStream<Point> spatialPointStream = Deserialization.TrajectoryStream(geoJSONStream, inputType, inputDateFormat, inputDelimiter, csvTsvSchemaAttr, "timestamp", "oID", uGrid);
 
 
-        DataStream<Point> filteredPoints = spatialPointStream
-                .connect(robotStream.broadcast(WhitelistGatekeeper.ALLOWED_LIST_DESC))
-                .process(new WhitelistGatekeeper());
+//        DataStream<Point> filteredPoints = spatialPointStream
+//                .connect(robotStream.broadcast(WhitelistGatekeeper.ALLOWED_LIST_DESC))
+//                .process(new WhitelistGatekeeper());
+
+        DataStream<AssignedPoint> enrichedStream = spatialPointStream
+                .keyBy(p -> p.objID)
+                .connect(robotStream.keyBy(cmd -> {
+                    String[] parts = cmd.split(":");
+                    if (parts.length >= 3) {
+                        return parts[2];
+                    }
+                    return "UNKNOWN";
+                }))
+                .process(new SessionManager());
 
 
-        PointPolygonJoinQuery joinQuery = new PointPolygonJoinQuery(realtimeConf, uGrid, uGrid);
-        //TODO change back to new PointPolygonOutsideJoinQuery(realtimeConf, uGrid, uGrid);
-        DataStream<Tuple2<Point, Polygon>> joinResult = joinQuery.run(
-                filteredPoints,
+
+        PointPolygonOutsideJoinQuery<AssignedPoint> joinQuery = new PointPolygonOutsideJoinQuery<>(realtimeConf, uGrid, uGrid);
+        DataStream<Tuple2<AssignedPoint, Polygon>> joinResult = joinQuery.run(
+                enrichedStream,
                 polygonStream,
                 0.0000001
         );
 
 
         joinResult
-                .keyBy((KeySelector<Tuple2<Point, Polygon>, String>) value -> value.f0.objID)
+                .keyBy((KeySelector<Tuple2<AssignedPoint, Polygon>, String>) value -> value.f0.objID)
                 .window(TumblingProcessingTimeWindows.of(Time.seconds(1)))
-                .process(new ProcessWindowFunction<Tuple2<Point, Polygon>, String, String, TimeWindow>() {
+                .process(new ProcessWindowFunction<Tuple2<AssignedPoint, Polygon>, String, String, TimeWindow>() {
                     @Override
-                    public void process(String key, Context context, Iterable<Tuple2<Point, Polygon>> elements, Collector<String> out) {
+                    public void process(String key, Context context, Iterable<Tuple2<AssignedPoint, Polygon>> elements, Collector<String> out) {
                         long windowStart = context.window().getStart(); // window start in ms
                         long windowEnd = context.window().getEnd();   // window end in ms
 
@@ -172,6 +188,7 @@ public class ParcelControlStreamingJob implements Serializable {
 
                     }
                 })
+                //.print();
                 .addSink(createKafkaProducer(config.outputTopicName, kafkaProperties));
 
 

@@ -1,6 +1,5 @@
 package GIS4IoRT.utils;
 
-
 import GeoFlink.spatialIndices.UniformGrid;
 import GeoFlink.spatialObjects.Polygon;
 import org.apache.flink.api.common.state.MapState;
@@ -16,12 +15,10 @@ import org.apache.flink.util.Collector;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.Geometry;
 import org.locationtech.jts.io.WKBReader;
-import org.locationtech.jts.io.geojson.GeoJsonReader; // Używamy JTS Readera
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
 
 public class DynamicParcelRepeater extends KeyedProcessFunction<String, String, Polygon> {
 
@@ -29,12 +26,22 @@ public class DynamicParcelRepeater extends KeyedProcessFunction<String, String, 
     private ValueState<Long> nextTimerState;
 
     private final UniformGrid uGrid;
-    private final long INTERVAL_MS = 1000;
+    private final long intervalMs; // To teraz będzie pole finalne, obliczane w konstruktorze
 
     private transient WKBReader wkbReader;
 
-    public DynamicParcelRepeater(UniformGrid uGrid) {
+    public DynamicParcelRepeater(UniformGrid uGrid, int slideStepSeconds) {
         this.uGrid = uGrid;
+
+        long calculatedInterval = (slideStepSeconds * 1000L) / 2;
+
+
+        if (calculatedInterval > 1000) calculatedInterval = 1000;
+        if (calculatedInterval < 50) calculatedInterval = 50;
+
+        this.intervalMs = calculatedInterval;
+
+        System.out.println("REPEATER: Interval set to: " + this.intervalMs + " ms");
     }
 
     @Override
@@ -49,17 +56,24 @@ public class DynamicParcelRepeater extends KeyedProcessFunction<String, String, 
         this.wkbReader = new WKBReader();
     }
 
-    //TODO dodać CLEAR?
     @Override
     public void processElement(String command, Context ctx, Collector<Polygon> out) throws Exception {
-        // Format: ZONE:AKCJA:ID:DANE
+        // Format: ZONE:ACTION:ID:DATA
 
         if (command == null || !command.startsWith("ZONE")) return;
 
         String[] parts = command.split(":", 4);
-        if (parts.length < 3) return;
+        if (parts.length < 2) return;
 
         String action = parts[1].toUpperCase();
+
+        if ("CLEAR".equals(action) || "RESET".equals(action)) {
+            activeZonesState.clear();
+            System.out.println("REPEATER: CLEARED ALL ZONES");
+            return;
+        }
+
+        if (parts.length < 3) return;
         String zoneId = parts[2];
 
         if ("ADD".equals(action)) {
@@ -83,13 +97,13 @@ public class DynamicParcelRepeater extends KeyedProcessFunction<String, String, 
 
                     activeZonesState.put(zoneId, p);
                     System.out.println("REPEATER: Zone added/updated: " + zoneId);
+
+                    out.collect(p);
                 }
             } catch (Exception e) {
                 System.err.println("REPEATER: Error parsing zone " + zoneId + ": " + e.getMessage());
             }
         }
-
-
         else if ("DELETE".equals(action) || "REMOVE".equals(action)) {
             activeZonesState.remove(zoneId);
             System.out.println("REPEATER: Zone removed: " + zoneId);
@@ -105,16 +119,16 @@ public class DynamicParcelRepeater extends KeyedProcessFunction<String, String, 
         long currentTime = System.currentTimeMillis();
 
         for (Polygon p : activeZonesState.values()) {
+            p.timeStampMillisec = currentTime;
             out.collect(p);
         }
 
         registerNextTimer(ctx.timerService());
     }
 
-
     private void registerNextTimer(org.apache.flink.streaming.api.TimerService timerService) throws Exception {
         long now = timerService.currentProcessingTime();
-        long nextTime = now + INTERVAL_MS;
+        long nextTime = now + intervalMs;
         timerService.registerProcessingTimeTimer(nextTime);
         nextTimerState.update(nextTime);
     }

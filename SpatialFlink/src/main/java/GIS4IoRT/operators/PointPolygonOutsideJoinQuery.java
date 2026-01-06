@@ -1,5 +1,6 @@
 package GIS4IoRT.operators;
 
+import GIS4IoRT.objects.AssignedPoint;
 import GeoFlink.spatialIndices.SpatialIndex;
 import GeoFlink.spatialIndices.UniformGrid;
 import GeoFlink.spatialObjects.Point;
@@ -18,15 +19,17 @@ import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
-public class PointPolygonOutsideJoinQuery extends JoinQuery<Point, Polygon> {
+public class PointPolygonOutsideJoinQuery<T extends Point> extends JoinQuery<T, Polygon> {
 
     public PointPolygonOutsideJoinQuery(QueryConfiguration conf, SpatialIndex index1, SpatialIndex index2){
         super.initializeJoinQuery(conf, index1, index2);
     }
 
-    public DataStream<Tuple2<Point, Polygon>> run(DataStream<Point> ordinaryPointStream, DataStream<Polygon> queryPolygonStream, double queryRadius) {
+    public DataStream<Tuple2<T, Polygon>> run(DataStream<T> ordinaryPointStream, DataStream<Polygon> queryPolygonStream, double queryRadius) {
         boolean approximateQuery = this.getQueryConfiguration().isApproximateQuery();
         int allowedLateness = this.getQueryConfiguration().getAllowedLateness();
 
@@ -43,8 +46,6 @@ public class PointPolygonOutsideJoinQuery extends JoinQuery<Point, Polygon> {
             return windowBased(ordinaryPointStream, queryPolygonStream, uGrid, qGrid, queryRadius, windowSize, slideStep, allowedLateness, approximateQuery);
         }
         else if(this.getQueryConfiguration().getQueryType() == QueryType.RealTimeNaive) {
-            // Tutaj też należałoby podmienić join na coGroup, jeśli ta metoda jest używana
-            // Dla uproszczenia przykładu skupiam się na głównej metodzie windowBased
             int omegaJoinDurationSeconds = this.getQueryConfiguration().getWindowSize();
             return realTimeNaive(ordinaryPointStream, queryPolygonStream, uGrid, qGrid, queryRadius, omegaJoinDurationSeconds, omegaJoinDurationSeconds, allowedLateness, approximateQuery);
         }
@@ -53,24 +54,18 @@ public class PointPolygonOutsideJoinQuery extends JoinQuery<Point, Polygon> {
         }
     }
 
-    // ---------------------------------------------------------
-    // KLUCZOWA ZMIANA: WINDOW BASED ("Anti-Join" Logic)
-    // ---------------------------------------------------------
-    private DataStream<Tuple2<Point, Polygon>> windowBased(DataStream<Point> ordinaryPointStream, DataStream<Polygon> queryPolygonStream, UniformGrid uGrid, UniformGrid qGrid, double queryRadius, int windowSize, int slideStep, int allowedLateness, boolean approximateQuery){
+    private DataStream<Tuple2<T, Polygon>> windowBased(DataStream<T> ordinaryPointStream, DataStream<Polygon> queryPolygonStream, UniformGrid uGrid, UniformGrid qGrid, double queryRadius, int windowSize, int slideStep, int allowedLateness, boolean approximateQuery){
 
-        // 1. Strumień punktów z Watermarkami
-        DataStream<Point> pointStreamWithTsAndWm =
-                ordinaryPointStream.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<Point>(Time.seconds(allowedLateness)) {
+        DataStream<T> pointStreamWithTsAndWm =
+                ordinaryPointStream.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<T>(Time.seconds(allowedLateness)) {
                     @Override
-                    public long extractTimestamp(Point p) {
+                    public long extractTimestamp(T p) {
                         return p.timeStampMillisec;
                     }
                 }).startNewChain();
 
-        // 2. Replikacja wielokątów (standardowa procedura GeoFlink)
         DataStream<Polygon> replicatedQueryStream = JoinQuery.getReplicatedPolygonQueryStream(queryPolygonStream, queryRadius, qGrid);
 
-        // 3. Strumień wielokątów z Watermarkami
         DataStream<Polygon> replicatedQueryStreamWithTsAndWm =
                 replicatedQueryStream.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<Polygon>(Time.seconds(allowedLateness)) {
                     @Override
@@ -79,11 +74,10 @@ public class PointPolygonOutsideJoinQuery extends JoinQuery<Point, Polygon> {
                     }
                 }).startNewChain();
 
-        // 4. Użycie coGroup zamiast join
-        DataStream<Tuple2<Point, Polygon>> joinOutput = pointStreamWithTsAndWm.coGroup(replicatedQueryStreamWithTsAndWm)
-                .where(new KeySelector<Point, String>() {
+        DataStream<Tuple2<T, Polygon>> joinOutput = pointStreamWithTsAndWm.coGroup(replicatedQueryStreamWithTsAndWm)
+                .where(new KeySelector<T, String>() {
                     @Override
-                    public String getKey(Point p) throws Exception {
+                    public String getKey(T p) throws Exception {
                         return p.gridID;
                     }
                 }).equalTo(new KeySelector<Polygon, String>() {
@@ -92,36 +86,79 @@ public class PointPolygonOutsideJoinQuery extends JoinQuery<Point, Polygon> {
                         return q.gridID;
                     }
                 }).window(SlidingProcessingTimeWindows.of(Time.seconds(windowSize), Time.seconds(slideStep)))
-                .apply(new CoGroupFunction<Point, Polygon, Tuple2<Point, Polygon>>() {
+                .apply(new CoGroupFunction<T, Polygon, Tuple2<T, Polygon>>() {
                     @Override
-                    public void coGroup(Iterable<Point> points, Iterable<Polygon> polygons, Collector<Tuple2<Point, Polygon>> out) throws Exception {
+                    public void coGroup(Iterable<T> points, Iterable<Polygon> polygons, Collector<Tuple2<T, Polygon>> out) throws Exception {
 
-                        // Buforujemy wielokąty w liście, aby móc iterować po nich wielokrotnie (dla każdego punktu)
-                        List<Polygon> polygonList = new ArrayList<>();
+                        Map<String, Polygon> zoneMap = new HashMap<>();
                         for (Polygon p : polygons) {
-                            polygonList.add(p);
+                            zoneMap.put(p.objID, p);
                         }
 
-                        // Iterujemy po wszystkich punktach w tym oknie (i w tej komórce siatki)
-                        for (Point p : points) {
+
+                        for (T p : points) {
+
+                            List<String> assignedZones = null;
+                            if (p instanceof AssignedPoint) {
+                                assignedZones = ((AssignedPoint) p).assignedZoneIDs;
+                            }
+
+
                             boolean isInsideAny = false;
 
-                            // Sprawdzamy czy punkt pasuje do któregokolwiek wielokąta
-                            for (Polygon poly : polygonList) {
-                                if (approximateQuery) {
-                                    isInsideAny = true;
-                                    break;
-                                } else {
-                                    if (DistanceFunctions.getDistance(p, poly) <= queryRadius) {
-                                        isInsideAny = true;
-                                        break;
+//                            if (assignedZones != null && !assignedZones.isEmpty()) {
+//                                for (String zoneID : assignedZones) {
+//                                    Polygon targetZone = zoneMap.get(zoneID);
+//
+//                                    if (targetZone != null) {
+//                                        if (approximateQuery) {
+//                                            isInsideAny = true;
+//                                            break;
+//                                        } else {
+//                                            if (DistanceFunctions.getDistance(p, targetZone) <= queryRadius) {
+//                                                isInsideAny = true;
+//                                                break;
+//                                            }
+//                                        }
+//                                    } else{
+//                                        System.out.println("--- SYNC ERROR ---");
+//                                        System.out.println("Robot Time: " + p.timeStampMillisec);
+//                                        System.out.println("Robot Grid: " + p.gridID);
+//                                        System.out.println("Lookig for Zone: " + zoneID);
+//                                        System.out.println("Available Zones on the Map: " + zoneMap.keySet());
+//
+//                                        for(Polygon poly : zoneMap.values()) {
+//                                            System.out.println(" -> Available Zone: " + poly.objID + " Time: " + poly.timeStampMillisec);
+//                                        }
+//                                        System.out.println("------------------");
+//                                    }
+//                                }
+//                            } else {
+//                                isInsideAny = true;
+//                            }
+//
+//                            if (!isInsideAny) {
+//
+//                                    out.collect(Tuple2.of(p, null));
+//
+//                            }
+
+//------------------------------------------------------------------------
+                            //TODO change back after testing
+                            for (String zoneID : assignedZones) {
+                                Polygon targetZone = zoneMap.get(zoneID);
+
+                                if (targetZone != null) {
+
+                                    if (DistanceFunctions.getDistance(p, targetZone) <= 0.0) { // lub <= replicationRadius
+
+                                        out.collect(Tuple2.of(p, targetZone));
                                     }
                                 }
                             }
+//------------------------------------------------------------------------
 
-                            if (!isInsideAny) {
-                                out.collect(Tuple2.of(p, null));
-                            }
+
                         }
                     }
                 });
@@ -130,12 +167,12 @@ public class PointPolygonOutsideJoinQuery extends JoinQuery<Point, Polygon> {
     }
 
 
-    private DataStream<Tuple2<Point, Polygon>> realTimeNaive(DataStream<Point> ordinaryPointStream, DataStream<Polygon> queryPolygonStream, UniformGrid uGrid, UniformGrid qGrid, double queryRadius, int windowSize, int slideStep, int allowedLateness, boolean approximateQuery){
+    private DataStream<Tuple2<T, Polygon>> realTimeNaive(DataStream<T> ordinaryPointStream, DataStream<Polygon> queryPolygonStream, UniformGrid uGrid, UniformGrid qGrid, double queryRadius, int windowSize, int slideStep, int allowedLateness, boolean approximateQuery){
 
-        DataStream<Point> pointStreamWithTsAndWm =
-                ordinaryPointStream.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<Point>(Time.seconds(allowedLateness)) {
+        DataStream<T> pointStreamWithTsAndWm =
+                ordinaryPointStream.assignTimestampsAndWatermarks(new BoundedOutOfOrdernessTimestampExtractor<T>(Time.seconds(allowedLateness)) {
                     @Override
-                    public long extractTimestamp(Point p) {
+                    public long extractTimestamp(T p) {
                         return p.timeStampMillisec;
                     }
                 }).startNewChain();
@@ -151,20 +188,43 @@ public class PointPolygonOutsideJoinQuery extends JoinQuery<Point, Polygon> {
         return pointStreamWithTsAndWm.coGroup(queryStreamWithTsAndWm)
                 .where(k -> "1").equalTo(k -> "1")
                 .window(SlidingProcessingTimeWindows.of(Time.seconds(windowSize), Time.seconds(slideStep)))
-                .apply(new CoGroupFunction<Point, Polygon, Tuple2<Point, Polygon>>() {
+                .apply(new CoGroupFunction<T, Polygon, Tuple2<T, Polygon>>() {
                     @Override
-                    public void coGroup(Iterable<Point> points, Iterable<Polygon> polygons, Collector<Tuple2<Point, Polygon>> out) {
-                        List<Polygon> polygonList = new ArrayList<>();
-                        for (Polygon p : polygons) polygonList.add(p);
+                    public void coGroup(Iterable<T> points, Iterable<Polygon> polygons, Collector<Tuple2<T, Polygon>> out) {
+                        Map<String, Polygon> zoneMap = new HashMap<>();
+                        for (Polygon p : polygons) {
+                            zoneMap.put(p.objID, p);
+                        }
 
-                        for (Point p : points) {
-                            boolean isInsideAny = false;
-                            for (Polygon poly : polygonList) {
-                                if (approximateQuery || DistanceFunctions.getDistance(p, poly) <= queryRadius) {
-                                    isInsideAny = true;
-                                    break;
-                                }
+                        for (T p : points) {
+
+                            List<String> assignedZones = null;
+                            if (p instanceof AssignedPoint) {
+                                assignedZones = ((AssignedPoint) p).assignedZoneIDs;
                             }
+
+                            boolean isInsideAny = false;
+
+                            if (assignedZones != null && !assignedZones.isEmpty()) {
+                                for (String zoneID : assignedZones) {
+                                    Polygon targetZone = zoneMap.get(zoneID);
+
+                                    if (targetZone != null) {
+                                        if (approximateQuery) {
+                                            isInsideAny = true;
+                                            break;
+                                        } else {
+                                            if (DistanceFunctions.getDistance(p, targetZone) <= queryRadius) {
+                                                isInsideAny = true;
+                                                break;
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                isInsideAny = true;
+                            }
+
                             if (!isInsideAny) {
                                 out.collect(Tuple2.of(p, null));
                             }

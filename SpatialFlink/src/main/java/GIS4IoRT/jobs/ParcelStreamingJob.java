@@ -320,8 +320,8 @@ public class ParcelStreamingJob implements Serializable {
 
 
                 DataStream<Polygon> polygonStream = zoneStream
-                        .keyBy(cmd -> "ZONE_MANAGER") // Wszystkie komendy strefowe w jedno miejsce
-                        .process(new DynamicParcelRepeater(uGrid));
+                        .keyBy(cmd -> "ZONE_MANAGER")
+                        .process(new DynamicParcelRepeater(uGrid,omegaDuration));
 
 
                 DataStream geoJSONStream = env.addSource(new FlinkKafkaConsumer<>(inputTopicName, new SimpleStringSchema(), kafkaProperties)

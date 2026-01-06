@@ -14,7 +14,7 @@ services:
         broker:
           condition: service_healthy
       ports:
-        - "8082:8081"
+        - "8082:8081"  #UI:  http://localhost:8082/
       volumes:
         - ./data:/data
 
@@ -127,25 +127,47 @@ services:
     command: rviz2 -d /root/.rviz2/parcelles_gps.rviz
 
 
-  kafka_bridge:
+  # kafka_bridge:
+  #   build: ./kafka_bridge
+  #   network_mode: host
+  #   depends_on:
+  #     - broker
+  #     - schema-registry
+  #   volumes:
+  #     - ./kafka_bridge/ros_kafka_bridge.py:/app/ros_kafka_bridge.py
+  #   env_file: .env
+  #   command: ["python3", "/app/ros_kafka_bridge.py", "--ros-args", "-p", "robot_name:=leader", "-p", "kafka_bootstrap_servers:=localhost:9092"]
+
+  multi_kafka_bridge:
     build: ./kafka_bridge
     network_mode: host
     depends_on:
       - broker
       - schema-registry
     volumes:
-      - ./kafka_bridge/ros_kafka_bridge.py:/app/ros_kafka_bridge.py
+      - ./kafka_bridge/multi_robot_kafka_bridge.py:/app/multi_robot_kafka_bridge.py
     env_file: .env
-    command: ["python3", "/app/ros_kafka_bridge.py", "--ros-args", "-p", "robot_name:=leader", "-p", "kafka_bootstrap_servers:=localhost:9092"]
+    command: ["python3", "/app/multi_robot_kafka_bridge.py", "--ros-args", "-p", "robot_list:=['leader', 'follower']", "-p", "kafka_bootstrap_servers:=localhost:9092"]
+
+
+
+  # visualizer:
+  #   build: ./visualizer
+  #   network_mode: host
+  #   volumes: 
+  #     - ./data:/app/data
+  #     - ./visualizer/marker_painter.py:/app/marker_painter.py
+  #   env_file: .env
+  #   command: ["python3", "/app/marker_painter.py", "--ros-args", "-p", "robot_name:=leader", "-p", "centroid_shape_name:='1 MONT'"]
 
   visualizer:
     build: ./visualizer
     network_mode: host
     volumes: 
       - ./data:/app/data
-      - ./visualizer/marker_painter.py:/app/marker_painter.py
+      - ./visualizer/multi_marker_painter.py:/app/multi_marker_painter.py
     env_file: .env
-    command: ["python3", "/app/marker_painter.py", "--ros-args", "-p", "robot_name:=leader", "-p", "centroid_shape_name:='1 MONT'"]
+    command: ["python3", "/app/multi_marker_painter.py", "--ros-args", "-p", "robot_list:=['leader', 'follower']", "-p", "centroid_shape_name:='1 MONT'"]
 
 
 
@@ -154,7 +176,7 @@ services:
 
 # docker exec -it ros2-visualizer-1 bash
 # source /opt/ros/jazzy/setup.bash
-# ros2 bag play /app/data/plots/plots.db3 --rate 10 --topics /leader/gps/fix
+# ros2 bag play /app/data/plots/plots.db3 --rate 10 --topics /leader/gps/fix /follower/gps/fix
 
 #or
 
