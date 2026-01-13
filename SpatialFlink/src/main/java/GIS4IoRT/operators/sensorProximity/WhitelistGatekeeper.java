@@ -1,4 +1,4 @@
-package GIS4IoRT.utils;
+package GIS4IoRT.operators.sensorProximity;
 
 import GeoFlink.spatialObjects.Point;
 import org.apache.flink.api.common.state.MapStateDescriptor;
@@ -7,16 +7,15 @@ import org.apache.flink.api.common.state.BroadcastState;
 import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.streaming.api.functions.co.BroadcastProcessFunction;
 import org.apache.flink.util.Collector;
-import org.apache.flink.configuration.Configuration;
 
 
 public class WhitelistGatekeeper extends BroadcastProcessFunction<Point, String, Point> {
 
-    public static final MapStateDescriptor<String, String> ALLOWED_LIST_DESC =
+    public static final MapStateDescriptor<String, Boolean> ALLOWED_LIST_DESC =
             new MapStateDescriptor<>(
                     "allowedRobotsState",
                     BasicTypeInfo.STRING_TYPE_INFO,
-                    BasicTypeInfo.STRING_TYPE_INFO
+                    BasicTypeInfo.BOOLEAN_TYPE_INFO
             );
 
     @Override
@@ -29,10 +28,10 @@ public class WhitelistGatekeeper extends BroadcastProcessFunction<Point, String,
         String action = parts[1].toUpperCase();
         String robotId = parts[2];
 
-        BroadcastState<String, String> state = ctx.getBroadcastState(ALLOWED_LIST_DESC);
+        BroadcastState<String, Boolean> state = ctx.getBroadcastState(ALLOWED_LIST_DESC);
 
         if ("ALLOW".equals(action)) {
-            state.put(robotId, "ALLOWED");
+            state.put(robotId, true);
             System.out.println("GATEKEEPER: Robot allowed: " + robotId);
         }
         else if ("BLOCK".equals(action) || "DENY".equals(action)) {
@@ -48,7 +47,7 @@ public class WhitelistGatekeeper extends BroadcastProcessFunction<Point, String,
     @Override
     public void processElement(Point point, ReadOnlyContext ctx, Collector<Point> out) throws Exception {
 
-        ReadOnlyBroadcastState<String, String> state = ctx.getBroadcastState(ALLOWED_LIST_DESC);
+        ReadOnlyBroadcastState<String, Boolean> state = ctx.getBroadcastState(ALLOWED_LIST_DESC);
 
         String robotId = point.objID;
 

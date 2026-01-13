@@ -1,4 +1,4 @@
-package GIS4IoRT.operators;
+package GIS4IoRT.operators.geofencing.batch;
 
 import GIS4IoRT.objects.AssignedPoint;
 import GeoFlink.spatialIndices.SpatialIndex;
@@ -9,7 +9,9 @@ import GeoFlink.spatialOperators.QueryConfiguration;
 import GeoFlink.spatialOperators.QueryType;
 import GeoFlink.spatialOperators.join.JoinQuery;
 import GeoFlink.utils.DistanceFunctions;
-import org.apache.flink.api.common.functions.CoGroupFunction; // Zmiana z JoinFunction
+import org.apache.flink.api.common.functions.*;
+import org.apache.flink.api.common.typeinfo.TypeHint;
+import org.apache.flink.api.java.DataSet;
 import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -18,10 +20,7 @@ import org.apache.flink.streaming.api.windowing.assigners.SlidingProcessingTimeW
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class PointPolygonOutsideJoinQuery<T extends Point> extends JoinQuery<T, Polygon> {
 
@@ -106,56 +105,55 @@ public class PointPolygonOutsideJoinQuery<T extends Point> extends JoinQuery<T, 
 
                             boolean isInsideAny = false;
 
-//                            if (assignedZones != null && !assignedZones.isEmpty()) {
-//                                for (String zoneID : assignedZones) {
-//                                    Polygon targetZone = zoneMap.get(zoneID);
-//
-//                                    if (targetZone != null) {
-//                                        if (approximateQuery) {
-//                                            isInsideAny = true;
-//                                            break;
-//                                        } else {
-//                                            if (DistanceFunctions.getDistance(p, targetZone) <= queryRadius) {
-//                                                isInsideAny = true;
-//                                                break;
-//                                            }
-//                                        }
-//                                    } else{
-//                                        System.out.println("--- SYNC ERROR ---");
-//                                        System.out.println("Robot Time: " + p.timeStampMillisec);
-//                                        System.out.println("Robot Grid: " + p.gridID);
-//                                        System.out.println("Lookig for Zone: " + zoneID);
-//                                        System.out.println("Available Zones on the Map: " + zoneMap.keySet());
-//
-//                                        for(Polygon poly : zoneMap.values()) {
-//                                            System.out.println(" -> Available Zone: " + poly.objID + " Time: " + poly.timeStampMillisec);
-//                                        }
-//                                        System.out.println("------------------");
-//                                    }
-//                                }
-//                            } else {
-//                                isInsideAny = true;
-//                            }
-//
-//                            if (!isInsideAny) {
-//
-//                                    out.collect(Tuple2.of(p, null));
-//
-//                            }
+                            if (assignedZones != null && !assignedZones.isEmpty()) {
+                                for (String zoneID : assignedZones) {
+                                    Polygon targetZone = zoneMap.get(zoneID);
 
-//------------------------------------------------------------------------
-                            //TODO change back after testing
-                            for (String zoneID : assignedZones) {
-                                Polygon targetZone = zoneMap.get(zoneID);
+                                    if (targetZone != null) {
+                                        if (approximateQuery) {
+                                            isInsideAny = true;
+                                            break;
+                                        } else {
+                                            if (DistanceFunctions.getDistance(p, targetZone) <= queryRadius) {
+                                                isInsideAny = true;
+                                                break;
+                                            }
+                                        }
+                                    } else{
+                                        System.out.println("--- SYNC ERROR ---");
+                                        System.out.println("Robot Time: " + p.timeStampMillisec);
+                                        System.out.println("Robot Grid: " + p.gridID);
+                                        System.out.println("Lookig for Zone: " + zoneID);
+                                        System.out.println("Available Zones on the Map: " + zoneMap.keySet());
 
-                                if (targetZone != null) {
-
-                                    if (DistanceFunctions.getDistance(p, targetZone) <= 0.0) { // lub <= replicationRadius
-
-                                        out.collect(Tuple2.of(p, targetZone));
+                                        for(Polygon poly : zoneMap.values()) {
+                                            System.out.println(" -> Available Zone: " + poly.objID + " Time: " + poly.timeStampMillisec);
+                                        }
+                                        System.out.println("------------------");
                                     }
                                 }
+                            } else {
+                                isInsideAny = true;
                             }
+
+                            if (!isInsideAny) {
+
+                                    out.collect(Tuple2.of(p, null));
+
+                            }
+
+//------------------------------------------------------------------------
+//                            for (String zoneID : assignedZones) {
+//                                Polygon targetZone = zoneMap.get(zoneID);
+//
+//                                if (targetZone != null) {
+//
+//                                    if (DistanceFunctions.getDistance(p, targetZone) <= 0.0) { // lub <= replicationRadius
+//
+//                                        out.collect(Tuple2.of(p, targetZone));
+//                                    }
+//                                }
+//                            }
 //------------------------------------------------------------------------
 
 
@@ -231,6 +229,103 @@ public class PointPolygonOutsideJoinQuery<T extends Point> extends JoinQuery<T, 
                         }
                     }
                 });
+    }
+
+    public DataSet<Point> runBatch(
+            DataSet<Point> ordinaryPointStream,
+            DataSet<Polygon> queryPolygonStream,
+            double queryRadius
+           ) {
+
+        UniformGrid uGrid = (UniformGrid) this.getSpatialIndex1();
+        boolean approximateQuery = this.getQueryConfiguration().isApproximateQuery();
+
+        DataSet<Tuple2<Polygon, Boolean>> replicatedQueryStream = getReplicatedPolygonDataSet(queryPolygonStream, queryRadius, uGrid);
+
+        return ordinaryPointStream.coGroup(replicatedQueryStream)
+                .where(p -> p.gridID)
+                .equalTo(t -> t.f0.gridID)
+                .with(new CoGroupFunction<Point, Tuple2<Polygon, Boolean>, Point>() {
+                    @Override
+                    public void coGroup(Iterable<Point> points, Iterable<Tuple2<Polygon, Boolean>> polygons, Collector<Point> out) {
+
+                        List<Tuple2<Polygon, Boolean>> polygonList = new ArrayList<>();
+                        for (Tuple2<Polygon, Boolean> poly : polygons) {
+                            polygonList.add(poly);
+                        }
+
+                        if (polygonList.isEmpty()) {
+                            for (Point p : points) {
+                                out.collect(p);
+                            }
+                            return;
+                        }
+
+                        for (Point p : points) {
+                            boolean isInsideAny = false;
+
+                            for (Tuple2<Polygon, Boolean> entry : polygonList) {
+                                Polygon poly = entry.f0;
+                                boolean isCandidate = entry.f1;
+
+                                if (!isCandidate) {
+                                    isInsideAny = true;
+                                    break;
+                                }
+
+                                if (approximateQuery) {
+                                    isInsideAny = true;
+                                    break;
+                                } else {
+                                    if (DistanceFunctions.getDistance(p, poly) <= queryRadius) {
+                                        isInsideAny = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (!isInsideAny) {
+                                out.collect(p);
+                            }
+                        }
+                    }
+                });
+    }
+
+    private DataSet<Tuple2<Polygon, Boolean>> getReplicatedPolygonDataSet(DataSet<Polygon> queryPolygons, double queryRadius, UniformGrid uGrid) {
+
+        return queryPolygons.flatMap(new RichFlatMapFunction<Polygon, Tuple2<Polygon, Boolean>>() {
+
+            @Override
+            public void flatMap(Polygon poly, Collector<Tuple2<Polygon, Boolean>> out) throws Exception {
+                Set<String> guaranteedNeighboringCells = uGrid.getGuaranteedNeighboringCells(queryRadius, poly);
+                Set<String> candidateNeighboringCells = uGrid.getCandidateNeighboringCells(queryRadius, poly, guaranteedNeighboringCells);
+
+                for (String gridID : guaranteedNeighboringCells) {
+                    Polygon p = new Polygon(
+                            poly.getCoordinates(),
+                            poly.objID,
+                            poly.gridIDsSet,
+                            gridID,
+                            poly.timeStampMillisec,
+                            poly.boundingBox
+                    );
+                    out.collect(new Tuple2<>(p, false));
+                }
+
+                for (String gridID : candidateNeighboringCells) {
+                    Polygon p = new Polygon(
+                            poly.getCoordinates(),
+                            poly.objID,
+                            poly.gridIDsSet,
+                            gridID,
+                            poly.timeStampMillisec,
+                            poly.boundingBox
+                    );
+                    out.collect(new Tuple2<>(p, true));
+                }
+            }
+        }).returns(new TypeHint<Tuple2<Polygon, Boolean>>(){});
     }
 
 }
