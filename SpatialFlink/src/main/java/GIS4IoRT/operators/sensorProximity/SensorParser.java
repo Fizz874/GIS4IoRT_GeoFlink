@@ -6,6 +6,8 @@ import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.util.Collector;
 
+// Parses dynamic environmental telemetry from the sensor stream
+
 public class SensorParser implements FlatMapFunction<String, SensorRaw> {
 
     private transient ObjectMapper jsonParser;

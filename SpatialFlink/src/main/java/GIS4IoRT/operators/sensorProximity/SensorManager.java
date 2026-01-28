@@ -13,6 +13,8 @@ import org.apache.flink.util.Collector;
 
 import java.util.Objects;
 
+// Manages Sensor State by joining static configuration with dynamic readings.
+
 public class SensorManager extends KeyedCoProcessFunction<String, SensorConfig, SensorRaw, SensorPoint> {
 
     private ValueState<SensorConfig> configState;

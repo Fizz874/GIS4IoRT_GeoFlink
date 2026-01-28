@@ -1,4 +1,4 @@
-package GIS4IoRT.operators.sensorProximity;
+package GIS4IoRT.operators;
 
 import GeoFlink.spatialObjects.Point;
 import org.apache.flink.api.common.state.MapStateDescriptor;
@@ -8,6 +8,8 @@ import org.apache.flink.api.common.typeinfo.BasicTypeInfo;
 import org.apache.flink.streaming.api.functions.co.BroadcastProcessFunction;
 import org.apache.flink.util.Collector;
 
+// Implements the Broadcast State pattern to dynamically filter the data stream based on real-time control signals.
+// It acts as a gatekeeper, ensuring only whitelisted or active robot identifiers are propagated to other operators.
 
 public class WhitelistGatekeeper extends BroadcastProcessFunction<Point, String, Point> {
 

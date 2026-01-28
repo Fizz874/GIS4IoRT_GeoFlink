@@ -6,6 +6,7 @@ import org.apache.flink.api.common.functions.MapFunction;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 
+//Deserializes raw JSON telemetry into domain-specific Point objects
 public class JsonToPointMapper implements MapFunction<String, Point> {
 
     private final UniformGrid uGrid;

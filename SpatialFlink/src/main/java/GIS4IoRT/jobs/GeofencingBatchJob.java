@@ -45,7 +45,7 @@ public class GeofencingBatchJob implements Serializable {
         public String targetRobots = "";
         public String targetParcels = "";
 
-        public double radius = 0.0000001;
+        public double radius = 0.000000001;
     }
 
 

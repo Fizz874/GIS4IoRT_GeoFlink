@@ -13,6 +13,9 @@ import org.apache.flink.util.Collector;
 import java.util.ArrayList;
 import java.util.List;
 
+// Implements Broadcast State to maintain dynamic robot-to-zone assignments.
+// Enriches the stream by attaching target Zone IDs to authorized robots and filters unauthorized traffic.
+
 public class SessionBroadcastManager extends BroadcastProcessFunction<Point, String, AssignedPoint> {
 
     public static final MapStateDescriptor<String, List<String>> ASSIGNMENT_STATE_DESC =

@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
+// Loads static polygon geometries (parcels/zones) and indexes them into the Uniform Grid.
+
 public class ParcelLoader {
 
 

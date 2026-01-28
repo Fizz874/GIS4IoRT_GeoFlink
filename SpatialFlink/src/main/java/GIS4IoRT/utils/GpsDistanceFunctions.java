@@ -3,6 +3,12 @@ package GIS4IoRT.utils;
 import GIS4IoRT.objects.SensorPoint;
 import GeoFlink.spatialObjects.Point;
 
+/* Geospatial Distance Utility Functions
+ * This utility class provides static methods to calculate geodesic distances between
+ * various spatial objects using the Haversine formula. It is specifically designed
+ * to handle Earth's curvature by operating on latitude and longitude coordinates.
+ */
+
 public class GpsDistanceFunctions {
     private static final int EARTH_RADIUS = 6371000;
 

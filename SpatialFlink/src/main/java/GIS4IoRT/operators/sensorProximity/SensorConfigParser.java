@@ -7,6 +7,8 @@ import org.apache.flink.util.Collector;
 import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.util.Collector;
 
+// Parses static sensor metadata (ID, Location, Radius) from the control stream.
+
 public class SensorConfigParser implements FlatMapFunction<String, SensorConfig> {
 
     @Override

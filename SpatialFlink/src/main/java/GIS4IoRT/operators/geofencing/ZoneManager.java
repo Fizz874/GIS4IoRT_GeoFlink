@@ -17,6 +17,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
+// Routes zone events to grid cells
+// Handles spatial replication by propagating zone events to all grid cells intersected by the zone's radius.
+
 public class ZoneManager extends KeyedProcessFunction<String, String, ZoneEvent> {
 
     private static final Logger LOG = LoggerFactory.getLogger(ZoneManager.class);

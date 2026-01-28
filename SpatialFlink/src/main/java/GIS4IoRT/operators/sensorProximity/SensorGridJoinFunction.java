@@ -12,6 +12,11 @@ import org.apache.flink.streaming.api.functions.co.KeyedCoProcessFunction;
 import org.apache.flink.util.Collector;
 import GeoFlink.utils.DistanceFunctions;
 
+import java.util.Locale;
+
+// Executes the core proximity detection logic by joining Robot and Sensor streams on GridID.
+// Calculates Euclidean distance locally within each partition to detect proximity events.
+
 public class SensorGridJoinFunction extends KeyedCoProcessFunction<String, Point, SensorPoint, String> {
 
     private MapState<String, SensorPoint> sensorsInGrid;
@@ -39,9 +44,24 @@ public class SensorGridJoinFunction extends KeyedCoProcessFunction<String, Point
             if (sensor.humidity > sensor.threshold) {
                 double dist = GpsDistanceFunctions.getDistance(robot, sensor);
                 if (dist <= sensor.radius) {
-                    out.collect(String.format("ALERT: Robot %s near sensor %s (Dist: %.2fm, Hum: %.1f)", //TODO change format
-                            robot.objID, sensor.objID, dist, sensor.humidity));
+                    String json = String.format(Locale.US,
+                            "{\"type\":\"sensor_proximity\",\"robot\":\"%s\",\"sensor\":\"%s\",\"dist\":%s,\"hum\":%s," +
+                                    "\"ts_r\":%d,\"lat_r\":%s,\"lon_r\":%s," +
+                                    "\"ts_s\":%d,\"lat_s\":%s,\"lon_s\":%s}",
+                            robot.objID,
+                            sensor.objID,
+                            dist,
+                            sensor.humidity,
+                            robot.timeStampMillisec,
+                            robot.point.getY(),
+                            robot.point.getX(),
+                            sensor.timeStampMillisec,
+                            sensor.point.getY(),
+                            sensor.point.getX()
+                    );
+                    out.collect(json);
                 }
+
             }
         }
     }

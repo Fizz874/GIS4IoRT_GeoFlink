@@ -13,6 +13,10 @@ import org.apache.flink.util.Collector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+// Spatial Join (Checks distance(robot, zone) <= radius)
+// Executes core geofencing logic by joining enriched robot positions with active zone definitions.
+// Performs local distance calculations within the grid partition to verify spatial constraints.
+
 public class ZoneGridJoinFunction extends KeyedCoProcessFunction<String, AssignedPoint, ZoneEvent, AssignedPoint> {
 
     private static final Logger LOG = LoggerFactory.getLogger(ZoneGridJoinFunction.class);

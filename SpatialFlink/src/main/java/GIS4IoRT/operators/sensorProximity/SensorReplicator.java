@@ -7,6 +7,8 @@ import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.util.Collector;
 import java.util.HashSet;
 
+// Handles spatial boundary conditions by replicating sensor objects into adjacent grid cells.
+// Ensures that sensors overlapping multiple partitions are visible to robots in all affected areas.
 
 public class SensorReplicator implements FlatMapFunction<SensorPoint, SensorPoint> {
 

@@ -22,6 +22,8 @@ import org.apache.flink.util.Collector;
 
 import java.util.*;
 
+// Identifies points located strictly outside the defined polygons within the specified buffer radius.
+
 public class PointPolygonOutsideJoinQuery<T extends Point> extends JoinQuery<T, Polygon> {
 
     public PointPolygonOutsideJoinQuery(QueryConfiguration conf, SpatialIndex index1, SpatialIndex index2){
@@ -119,17 +121,6 @@ public class PointPolygonOutsideJoinQuery<T extends Point> extends JoinQuery<T, 
                                                 break;
                                             }
                                         }
-                                    } else{
-                                        System.out.println("--- SYNC ERROR ---");
-                                        System.out.println("Robot Time: " + p.timeStampMillisec);
-                                        System.out.println("Robot Grid: " + p.gridID);
-                                        System.out.println("Lookig for Zone: " + zoneID);
-                                        System.out.println("Available Zones on the Map: " + zoneMap.keySet());
-
-                                        for(Polygon poly : zoneMap.values()) {
-                                            System.out.println(" -> Available Zone: " + poly.objID + " Time: " + poly.timeStampMillisec);
-                                        }
-                                        System.out.println("------------------");
                                     }
                                 }
                             } else {
@@ -141,22 +132,6 @@ public class PointPolygonOutsideJoinQuery<T extends Point> extends JoinQuery<T, 
                                     out.collect(Tuple2.of(p, null));
 
                             }
-
-//------------------------------------------------------------------------
-//                            for (String zoneID : assignedZones) {
-//                                Polygon targetZone = zoneMap.get(zoneID);
-//
-//                                if (targetZone != null) {
-//
-//                                    if (DistanceFunctions.getDistance(p, targetZone) <= 0.0) { // lub <= replicationRadius
-//
-//                                        out.collect(Tuple2.of(p, targetZone));
-//                                    }
-//                                }
-//                            }
-//------------------------------------------------------------------------
-
-
                         }
                     }
                 });
